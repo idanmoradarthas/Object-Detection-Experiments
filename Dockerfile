@@ -35,10 +35,9 @@ RUN jupyter contrib nbextension install --sys-prefix
 RUN GIT_SSL_NO_VERIFY=true git clone https://github.com/tensorflow/models
 
 # COCO API installation
-RUN GIT_SSL_NO_VERIFY=true git clone https://github.com/cocodataset/cocoapi.git \
- && cd cocoapi/PythonAPI \
- && make \
- && cp -r pycocotools models/research/
+RUN GIT_SSL_NO_VERIFY=true git clone https://github.com/cocodataset/cocoapi.git
+RUN cd cocoapi/PythonAPI && make
+RUN cp -r cocoapi/PythonAPI/pycocotools models/research/
 RUN sudo rm -r cocoapi/
 
 RUN cd models/research && protoc object_detection/protos/*.proto --python_out=.
@@ -53,4 +52,4 @@ EXPOSE 8888
 RUN mkdir experiments
 COPY experiments experiments/
 
-CMD ["jupyter", "notebook"]
+CMD ["jupyter", "lab", "--allow-root"]
