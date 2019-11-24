@@ -80,6 +80,12 @@ com_crashlytics_export_strings.xml
 crashlytics.properties
 crashlytics-build.properties
 fabric.properties
-models/
 images/
 downloaded_models/
+models/
+/scripts/label_images/cars/
+/scripts/label_images/drugs/
+/scripts/label_images/faces/
+/scripts/label_images/nudity/
+/scripts/label_images/upskirt/
+/scripts/label_images/weapons/
