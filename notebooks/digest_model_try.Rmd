@@ -1,0 +1,185 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.1'
+      jupytext_version: 1.2.4
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+# Digest Object Detection try
+## Model preparation
+### Variables
+
+```{python}
+from pathlib import Path
+
+
+# What model to download.
+MODEL_NAME = "faster_rcnn_inception_resnet_v2_atrous_lowproposals_coco_2018_01_28"
+MODEL_FILE = MODEL_NAME + '.tar.gz'
+DOWNLOAD_BASE = 'http://download.tensorflow.org/models/object_detection/'
+
+# Path to frozen detection graph. This is the actual model that is used for the object detection.
+PATH_TO_FROZEN_GRAPH = MODEL_NAME + '/frozen_inference_graph.pb'
+
+# List of the strings that is used to add correct label for each box.
+PATH_TO_LABELS = Path("__file__").parent.absolute().parent.joinpath("models").joinpath("research").joinpath(
+    "object_detection").joinpath("data").joinpath("oid_bbox_trainable_label_map.pbtxt")
+```
+
+### Download Model
+
+```{python}
+import urllib
+
+
+opener = urllib.request.URLopener()
+opener.retrieve(DOWNLOAD_BASE + MODEL_FILE, MODEL_FILE)
+```
+
+### Extract Files
+
+```{python}
+import tarfile
+
+
+tar_file = tarfile.open(MODEL_FILE)
+tar_file.extractall()
+```
+
+### Load a (frozen) Tensorflow model into memory.
+
+```{python}
+import tensorflow
+
+
+detection_graph = tensorflow.Graph()
+with detection_graph.as_default():
+    od_graph_def = tensorflow.GraphDef()
+    with tensorflow.io.gfile.GFile(PATH_TO_FROZEN_GRAPH, "rb") as g_file:
+        serialized_graph = g_file.read()
+        od_graph_def.ParseFromString(serialized_graph)
+        tensorflow.import_graph_def(od_graph_def, name="")
+```
+
+### Loading label map
+
+```{python}
+from object_detection.utils import label_map_util
+
+
+
+category_index = label_map_util.create_category_index_from_labelmap(str(PATH_TO_LABELS.absolute()), use_display_name=True)
+category_index
+```
+
+### Helper code
+
+```{python}
+import numpy
+
+from PIL import Image
+
+
+def load_image_into_numpy_array(image: Image) -> numpy.ndarray:
+    (im_width, im_height) = image.size
+    array_image = numpy.array(image.getdata())
+    if (len(array_image.shape) < 2) or (array_image.shape[1] > 3):
+        image = image.convert("RGB")
+        array_image = numpy.array(image.getdata())
+    return array_image.reshape((im_height, im_width, 3)).astype(numpy.uint8)
+```
+
+### Classification code
+
+```{python}
+import pandas
+
+
+
+def label_image(path_to_image: Path) -> pandas.DataFrame:
+    with tensorflow.Session(graph=detection_graph) as sess:
+        ops = detection_graph.get_operations()
+        all_tensor_names = {output.name for op in ops for output in op.outputs}
+        tensor_dict = {}
+        for key in ['num_detections', 'detection_boxes', 'detection_scores', 'detection_classes']:
+            tensor_name = key + ':0'
+            if tensor_name in all_tensor_names:
+                tensor_dict[key] = detection_graph.get_tensor_by_name(tensor_name)
+        image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
+        image = Image.open(str(path_to_image))
+        image_np = load_image_into_numpy_array(image)
+        image_np_expanded = numpy.expand_dims(image_np, axis=0)
+        output_dict = sess.run(tensor_dict, feed_dict={image_tensor: image_np_expanded})
+    output_frame = pandas.DataFrame()
+    output_frame['detection_classes'] = output_dict['detection_classes'][0].astype(numpy.int64)
+    output_frame['detection_scores'] = output_dict['detection_scores'][0]
+    output_frame = output_frame[(output_frame["detection_scores"] > 0.65) & (output_frame['detection_classes'].isin([32, 203,
+                284, 8, 14, 16, 26, 88, 87, 93, 102, 107, 214, 251, 436, 446, 104, 195, 339, 369, 392, 405, 459, 1, 3, 4,
+                7, 12, 21, 39, 55, 62, 64, 113]))].copy(deep=True)
+    output_frame['detection_classes'] = output_frame['detection_classes'].apply(lambda detection_class: "Nudity" if \
+                                                                        detection_class in [32, 203, 284] else detection_class)
+    output_frame['detection_classes'] = output_frame['detection_classes'].apply(lambda detection_class: "Car" if \
+                                                                        detection_class in [8, 14, 16, 26, 88, 87, 93, 102, 
+                                                                                107, 214, 251, 436, 446] else detection_class)
+    output_frame['detection_classes'] = output_frame['detection_classes'].apply(lambda detection_class: "Weapon" if \
+                                                                        detection_class in [104, 195, 339, 369, 392, 405, 
+                                                                                            459] else detection_class)
+    output_frame['detection_classes'] = output_frame['detection_classes'].apply(lambda detection_class: "Face" if \
+                                                                        detection_class in [1, 3, 4, 7, 12, 21, 39, 55, 62,
+                                                                                            64, 113] else detection_class)
+    return output_frame
+```
+
+```{python}
+label_image(Path("__file__").parent.joinpath("images").joinpath("ghostgun-03.jpg"))
+```
+
+# Downloading Benchmark
+
+```{python}
+from google_images_download import google_images_download
+
+
+
+response = google_images_download.googleimagesdownload()
+arguments = {"keywords": "weapon", "limit": 200, "print_urls": False, "no_directory": True, "chromedriver": 
+             "C:\\chromedriver\\chromedriver.exe", "output_directory": "weapons"}
+response.download(arguments)
+```
+
+```{python}
+response = google_images_download.googleimagesdownload()
+arguments = {"keywords": "nudity", "limit": 1000, "print_urls": False, "no_directory": True, "chromedriver": 
+             "C:\\chromedriver\\chromedriver.exe", "output_directory": "nudity"}
+response.download(arguments)
+```
+
+```{python}
+response = google_images_download.googleimagesdownload()
+arguments = {"keywords": "vehicles cars", "limit": 200, "print_urls": False, "no_directory": True, "chromedriver": 
+             "C:\\chromedriver\\chromedriver.exe", "output_directory": "cars"}
+response.download(arguments)
+```
+
+```{python}
+response = google_images_download.googleimagesdownload()
+arguments = {"keywords": "drugs marijuana", "limit": 200, "print_urls": False, "no_directory": True, "chromedriver": 
+             "C:\\chromedriver\\chromedriver.exe", "output_directory": "drugs"}
+response.download(arguments)
+```
+
+```{python}
+response = google_images_download.googleimagesdownload()
+arguments = {"keywords": "upskirt", "limit": 1000, "print_urls": False, "no_directory": True, "chromedriver": 
+             "C:\\chromedriver\\chromedriver.exe", "output_directory": "upskirt"}
+response.download(arguments)
+```
+

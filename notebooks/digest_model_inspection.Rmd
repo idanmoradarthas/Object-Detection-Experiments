@@ -1,0 +1,94 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.1'
+      jupytext_version: 1.2.4
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+from pathlib import Path
+
+import pandas
+
+
+
+results = pandas.read_csv(Path("__file__").parent.absolute().parent.joinpath("scripts").joinpath(
+    "label_images").joinpath("detection_frame.csv"))
+results.head()
+```
+
+```{python}
+results.describe()
+```
+
+```{python}
+results = results[["filename", "folder", "detection class name", "detection score"]].fillna("no-class")
+results.head()
+```
+
+```{python}
+classification = results.groupby(["filename", "folder", "detection class name"], as_index=False).agg({"detection score": "max"})
+classification.head()
+```
+
+```{python}
+import matplotlib.pyplot as pyplot
+
+from inspect import signature
+from sklearn.metrics import average_precision_score, precision_recall_curve
+from ds_utils.metrics import print_confusion_matrix, plot_roc_curve
+
+
+# %matplotlib inline
+
+def calc_metrics(df: pandas.DataFrame, label: str) -> None:
+    print("=" * 20)
+    print(f"label = {label}")
+    print("=" * 20)
+    df["detection label threshold 0.5"] = df.apply(lambda row: 
+                                        1 if (row["detection score"] > 0.5) and (row["detection class name"] == label) else 0, 
+                                                   axis=1)
+    df["detection label threshold 0.65"] = df.apply(lambda row: 
+                                        1 if (row["detection score"] > 0.65) and (row["detection class name"] == label) else 0, 
+                                                    axis=1)
+    print()
+    print("Confusion Matrix Threshold = 0.5")
+    print("=" * 20)
+    print_confusion_matrix([1] * df.shape[0] , df["detection label threshold 0.5"], 1, 0)
+    print()
+    print("Confusion Matrix Threshold = 0.65")
+    print("=" * 20)
+    print_confusion_matrix([1] * df.shape[0] , df["detection label threshold 0.65"], 1, 0)
+```
+
+```{python}
+calc_metrics(classification[classification["folder"] == "cars"].copy(deep=True), "car")
+```
+
+```{python}
+calc_metrics(classification[classification["folder"] == "drugs"].copy(deep=True), "drug")
+```
+
+```{python}
+calc_metrics(classification[classification["folder"] == "faces"].copy(deep=True), "face")
+```
+
+```{python}
+calc_metrics(classification[classification["folder"] == "nudity"].copy(deep=True), "nudity")
+```
+
+```{python}
+calc_metrics(classification[classification["folder"] == "upskirt"].copy(deep=True), "upskirt")
+```
+
+```{python}
+calc_metrics(classification[classification["folder"] == "weapons"].copy(deep=True), "weapon")
+```
