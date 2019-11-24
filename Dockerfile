@@ -26,7 +26,10 @@ RUN pip install -U pip \
  contextlib2 \
  jupyter_contrib_nbextensions \
  googledrivedownloader \
- opencv-python
+ opencv-python \
+ jupytext
+
+RUN pip install git+https://github.com/idanmoradarthas/DataScienceUtils.git
 
 # Add dataframe display widget
 RUN jupyter contrib nbextension install --sys-prefix
@@ -44,12 +47,23 @@ RUN cd models/research && protoc object_detection/protos/*.proto --python_out=.
 
 RUN cd models/research && python setup.py build && python setup.py install
 
-# Set TF object detection available
-ENV PYTHONPATH "$PYTHONPATH:/home/jovyan/models/research:/home/jovyan/models/research/slim"
+RUN GIT_SSL_NO_VERIFY=true git clone https://github.com/pjreddie/darknet
+RUN cd darknet && make
+
+RUN cd darknet && wget https://pjreddie.com/media/files/yolov3.weights
 
 EXPOSE 8888
 
-RUN mkdir experiments
-COPY experiments experiments/
+RUN mkdir notebooks
+RUN mkdir downloaded_models
+RUN mkdir images
+RUN mkdir scripts
+COPY notebooks notebooks/
+COPY downloaded_models downloaded_models/
+COPY images images/
+COPY scripts scripts/
+
+# Set TF object detection available
+ENV PYTHONPATH "$PYTHONPATH:/home/jovyan/models/research:/home/jovyan/models/research/slim"
 
 CMD ["jupyter", "lab", "--allow-root"]
