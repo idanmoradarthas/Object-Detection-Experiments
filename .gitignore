@@ -82,7 +82,4 @@ crashlytics-build.properties
 fabric.properties
 models/
 images/
-!/scripts/label_images/*.csv
-!/scripts/label_images/*.txt
-/scripts/label_images/
 downloaded_models/
