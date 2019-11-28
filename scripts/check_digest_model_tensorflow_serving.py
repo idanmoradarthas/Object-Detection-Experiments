@@ -1,3 +1,4 @@
+import json
 import re
 import time
 from pathlib import Path
@@ -5,29 +6,22 @@ from typing import List
 
 import numpy
 import pandas
-import tensorflow
+import requests
 from PIL import Image
 from matplotlib import pyplot
 from object_detection.utils import visualization_utils
 from tqdm import tqdm
 
-# WEAPON_CLASSES = [104, 195, 339, 369, 392, 405, 459]
-#
-# NUDITY_CLASSES = [32, 203, 284]
-#
-# FACE_CLASSES = [1, 3, 4, 7, 12, 21, 39, 55, 62, 64, 113]
-#
-# CAR_CLASSES = [8, 14, 16, 26, 88, 87, 93, 102, 107, 214, 251, 436, 446]
-#
-# APPROVED_CLASSES = [32, 203, 284, 8, 14, 16, 26, 88, 87, 93, 102, 107, 214, 251, 436, 446, 104, 195, 339, 369, 392, 405,
-#                     459, 1, 3, 4, 7, 12, 21, 39, 55, 62, 64, 113]
+WEAPON_CLASSES = [104, 195, 339, 369, 392, 405, 459]
 
-NUDITY_CLASSES = [17, 197, 56]
-CAR_CLASSES = [404, 571, 409, 414, 400, 50, 300, 535, 594, 384, 6, 89]
-WEAPON_CLASSES = [408, 351, 440, 533, 306, 361, 166]
-FACE_CLASSES = [69, 308, 502, 228, 333, 51, 292, 568, 15, 148, 224]
-APPROVED_CLASSES = [17, 197, 56, 404, 571, 409, 414, 400, 50, 300, 535, 594, 384, 6, 89, 408, 351, 440, 533, 306, 361,
-                    166, 69, 308, 502, 228, 333, 51, 292, 568, 15, 148, 224]
+NUDITY_CLASSES = [32, 203, 284]
+
+FACE_CLASSES = [1, 3, 4, 7, 12, 21, 39, 55, 62, 64, 113]
+
+CAR_CLASSES = [8, 14, 16, 26, 88, 87, 93, 102, 107, 214, 251, 436, 446]
+
+APPROVED_CLASSES = [32, 203, 284, 8, 14, 16, 26, 88, 87, 93, 102, 107, 214, 251, 436, 446, 104, 195, 339, 369, 392, 405,
+                    459, 1, 3, 4, 7, 12, 21, 39, 55, 62, 64, 113]
 
 CATEGORY_DICT = {1: "car", 2: "drug", 3: "face", 4: "nudity", 5: "upskirt", 6: "weapon"}
 
@@ -37,16 +31,7 @@ CATEGORY_INDEX = {1: {'id': 1, 'name': 'car'}, 2: {'id': 2, 'name': 'drug'}, 3: 
 DETECTION_MAP_REGEX_PATTERN = re.compile(
     "{\\'filename\\': (\\'[\w\d\-._$%@=?\\\\:]*\\'), \\'folder\\': (\\'[\w\d\-._]*\\'), \\'full path\\': (\'[\w\d\-._$%@=?\\\\:]*\'), \\'detection class\\': (\d), \\'detection class name\\': (\\'[\w]*\\'), \\'detection box\\': array\(\[(([\w.]*\s*,\s*[\w.]*\s*,\s*[\w.]*\s*,\s*[\w.]*\s*)|)\], dtype=float32\), \\'detection score\\': ([\d.]*)}")
 
-
-def load_graph(path_to_frozen_graph: Path) -> tensorflow.Graph:
-    detection_graph = tensorflow.Graph()
-    with detection_graph.as_default():
-        od_graph_def = tensorflow.compat.v1.GraphDef()
-        with tensorflow.io.gfile.GFile(str(path_to_frozen_graph.absolute()), "rb") as g_file:
-            serialized_graph = g_file.read()
-            od_graph_def.ParseFromString(serialized_graph)
-            tensorflow.import_graph_def(od_graph_def, name="")
-    return detection_graph
+API_ENDPOINT = "http://localhost:8501/v1/models/digest_model:predict"
 
 
 def load_image_into_numpy_array(path_to_image: Path) -> numpy.ndarray:
@@ -59,30 +44,6 @@ def load_image_into_numpy_array(path_to_image: Path) -> numpy.ndarray:
     return array_image.reshape((im_height, im_width, 3)).astype(numpy.uint8)
 
 
-def label_image(detection_graph: tensorflow.Graph, tensor_dict: dict, image_np: numpy.ndarray) -> dict:
-    with tensorflow.compat.v1.Session(graph=detection_graph) as sess:
-        image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
-        image_np_expanded = numpy.expand_dims(image_np, axis=0)
-        output_dict = sess.run(tensor_dict, feed_dict={image_tensor: image_np_expanded})
-    output_dict['num_detections'] = int(output_dict['num_detections'][0])
-    output_dict['detection_classes'] = output_dict['detection_classes'][0].astype(numpy.int64)
-    output_dict['detection_boxes'] = output_dict['detection_boxes'][0]
-    output_dict['detection_scores'] = output_dict['detection_scores'][0]
-    return output_dict
-
-
-def create_tensor_dict(detection_graph: tensorflow.Graph) -> dict:
-    tensor_dict = {}
-    with tensorflow.compat.v1.Session(graph=detection_graph):
-        ops = detection_graph.get_operations()
-        all_tensor_names = {output.name for op in ops for output in op.outputs}
-        for key in ['num_detections', 'detection_boxes', 'detection_scores', 'detection_classes']:
-            tensor_name = key + ':0'
-            if tensor_name in all_tensor_names:
-                tensor_dict[key] = detection_graph.get_tensor_by_name(tensor_name)
-    return tensor_dict
-
-
 def covert_class(detected_class: int) -> int:
     return 1 if detected_class in CAR_CLASSES else (
         3 if detected_class in FACE_CLASSES else (
@@ -90,8 +51,7 @@ def covert_class(detected_class: int) -> int:
                 6 if detected_class in WEAPON_CLASSES else 0)))
 
 
-def handle_detection(label_dict: dict, detection_map: list, file: Path,
-                     folder_name: str) -> List[dict]:
+def handle_detection(label_dict: dict, detection_map: list, file: Path, folder_name: str) -> List[dict]:
     label_object_list = list()
 
     for i in range(label_dict['num_detections']):
@@ -115,7 +75,7 @@ def handle_detection(label_dict: dict, detection_map: list, file: Path,
                           "full path": str(file.absolute()),
                           "detection class": 0,
                           "detection class name": "",
-                          "detection box": numpy.array([], dtype=numpy.float32),
+                          "detection box": [],
                           "detection score": 0.0}
         detection_map.append(labeled_object)
         with Path("label_images").joinpath("detection_temp.txt").open(mode="a") as p:
@@ -125,24 +85,11 @@ def handle_detection(label_dict: dict, detection_map: list, file: Path,
 
 
 if __name__ == '__main__':
-    # label_file_name = "oid_bbox_trainable_label_map.pbtxt"
-    label_file_name = "oid_v4_label_map.pbtxt"
-    path_to_labels = Path("__file__").parent.absolute().parent.joinpath("models").joinpath("research").joinpath(
-        "object_detection").joinpath("data").joinpath(label_file_name)
-
-    # model_name = "faster_rcnn_inception_resnet_v2_atrous_lowproposals_oid_2018_01_28"
-    model_name = "ssd_mobilenet_v2_oid_v4_2018_12_12"
-    path_to_frozen_graph = Path("__file__").parent.absolute().parent.joinpath("downloaded_models").joinpath(
-        model_name).joinpath("frozen_inference_graph.pb")
-
-    detection_graph = load_graph(path_to_frozen_graph)
-    tensor_dict = create_tensor_dict(detection_graph)
-    print("finished loading graph")
-
     Path("label_images").mkdir(exist_ok=True)
     detection_map = list()
     detection_map_file = Path("label_images").joinpath("detection_temp.txt")
     times = Path("label_images").joinpath("times.txt")
+
     already_detected_files = set()
     if detection_map_file.exists():
         with detection_map_file.open(mode="r") as f:
@@ -156,19 +103,27 @@ if __name__ == '__main__':
                      "detection box": numpy.fromstring(m.group(6), dtype=numpy.float32, sep=','),
                      "detection score": eval(m.group(8))})
                 already_detected_files.add(eval(m.group(1)))
+
     for folder in Path("__file__").parent.absolute().parent.joinpath("images").iterdir():
         print(folder.name)
         Path("label_images").joinpath(folder.name).mkdir(exist_ok=True)
         for file in tqdm(folder.iterdir(), unit="image", total=len(list(folder.glob('*')))):
             if file.is_file() and not (file.name in already_detected_files):
                 image_np = load_image_into_numpy_array(file)
+                image_np_expanded = numpy.expand_dims(image_np, axis=0)
+                data = {"instances": image_np_expanded.tolist()}
                 start = time.time()
-                label_dict = label_image(detection_graph, tensor_dict, image_np)
+                response = json.loads(requests.post(url=API_ENDPOINT, json=data).text)
                 end = time.time()
+                output_dict = {}
+                output_dict['num_detections'] = int(response["predictions"][0]["num_detections"])
+                output_dict['detection_classes'] = response["predictions"][0]["detection_classes"]
+                output_dict['detection_boxes'] = response["predictions"][0]["detection_boxes"]
+                output_dict['detection_scores'] = response["predictions"][0]["detection_scores"]
                 with times.open(mode="a") as t:
                     t.write(f"{end - start}")
                     t.write("\n")
-                label_object_list = handle_detection(label_dict, detection_map, file, folder.name)
+                label_object_list = handle_detection(output_dict, detection_map, file, folder.name)
                 visualization_utils.visualize_boxes_and_labels_on_image_array(
                     image_np,
                     numpy.asarray([x["detection box"] for x in label_object_list]),

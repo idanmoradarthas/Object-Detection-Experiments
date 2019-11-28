@@ -17,6 +17,7 @@ RUN sudo apt-get install --no-install-recommends -y \
 
 # Install core packages
 RUN pip install -U pip \
+ git+https://github.com/idanmoradarthas/DataScienceUtils.git \
  numpy==1.16.2 \
  matplotlib \
  pandas \
@@ -27,9 +28,8 @@ RUN pip install -U pip \
  jupyter_contrib_nbextensions \
  googledrivedownloader \
  opencv-python \
- jupytext
-
-RUN pip install git+https://github.com/idanmoradarthas/DataScienceUtils.git
+ jupytext \
+ requests
 
 # Add dataframe display widget
 RUN jupyter contrib nbextension install --sys-prefix

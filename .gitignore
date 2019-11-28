@@ -83,9 +83,6 @@ fabric.properties
 images/
 downloaded_models/
 models/
-/scripts/label_images/cars/
-/scripts/label_images/drugs/
-/scripts/label_images/faces/
-/scripts/label_images/nudity/
-/scripts/label_images/upskirt/
-/scripts/label_images/weapons/
+scripts/results/faster_rcnn_inception_resnet_v2_atrous_lowproposals_oid_2018_01_28/label_images/
+scripts/results/ssd_mobilenet_v2_oid_v4_2018_12_12/label_images/
+scripts/saved_model/faster_rcnn_inception_resnet_v2_atrous_lowproposals_oid_2018_01_28/
