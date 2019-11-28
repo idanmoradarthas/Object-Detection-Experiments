@@ -19,7 +19,7 @@ RUN sudo apt-get install --no-install-recommends -y \
 RUN pip install -U pip \
  git+https://github.com/idanmoradarthas/DataScienceUtils.git \
  numpy==1.16.2 \
- matplotlib \
+ matplotlib==3.0.3 \
  pandas \
  Cython \
  scipy \
@@ -47,11 +47,6 @@ RUN cd models/research && protoc object_detection/protos/*.proto --python_out=.
 
 RUN cd models/research && python setup.py build && python setup.py install
 
-RUN GIT_SSL_NO_VERIFY=true git clone https://github.com/pjreddie/darknet
-RUN cd darknet && make
-
-RUN cd darknet && wget https://pjreddie.com/media/files/yolov3.weights
-
 EXPOSE 8888
 
 RUN mkdir notebooks
@@ -62,8 +57,5 @@ COPY notebooks notebooks/
 COPY downloaded_models downloaded_models/
 COPY images images/
 COPY scripts scripts/
-
-# Set TF object detection available
-ENV PYTHONPATH "$PYTHONPATH:/home/jovyan/models/research:/home/jovyan/models/research/slim"
 
 CMD ["jupyter", "lab", "--allow-root"]
